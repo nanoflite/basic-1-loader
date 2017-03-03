@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+
+import argparse
+import serial
+import sys
+import os
+import time
+
+THROTTLE = 0.0075
+baudrate = 19200
+
+def write(ser, message):
+    for m in message:
+        ser.write(m)
+        time.sleep(THROTTLE)
+
+def tell(message):
+    global parsed_args
+    if parsed_args.verbose:
+        print message
+
+
+def bar(value, end_value, bar_length):
+    percent = float(value) / end_value
+    hashes = '#' * int(round(percent * bar_length))
+    spaces = ' ' * (bar_length - len(hashes))
+    sys.stdout.write("\rLoading: [{0}] {1}%".format(hashes + spaces, int(round(percent * 100))))
+    sys.stdout.flush()
+
+def load(args):
+    port = "/dev/ttys0" if args.port is None else args.port
+    size = os.stat(args.program).st_size
+    tell("Loader")
+    tell(" file: %s" % args.program)
+    tell(" port: %s" % port)
+    tell("Open serial port")
+    ser = serial.Serial(port, baudrate)
+    tell("Writing program file")
+    write(ser, 'NEW\n')
+    if True:
+        with open(args.program, 'rb') as program:
+            i = 0
+            while True:
+                byte = program.read(1)
+                if not byte:
+                    break
+                ser.write(byte)
+                time.sleep(THROTTLE)
+                i += 1
+                tell("%d/%d" % (i, size))
+                if args.progress:
+                    bar(i, size, 40)
+    ser.close()
+    if args.progress:
+        sys.stdout.write("\n")
+    tell("Done")
+
+def execute(args):
+    port = "/dev/ttys0" if args.port is None else args.port
+    ser = serial.Serial(port, baudrate)
+    write(ser, args.line)
+    write(ser, '\n')
+    ser.close()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog='basic-1')
+    parser.add_argument("--verbose", help="Show what is going on.", action="store_true")
+    subparsers = parser.add_subparsers(help='command help')
+
+    parser_load = subparsers.add_parser('load', help='Load a program into the BASIC-1.')
+    parser_load.add_argument("--port", help="Specify connection port.")
+    parser_load.add_argument("--progress", help="Show a progress bar.", action="store_true")
+    parser_load.add_argument("program", help="Program file to upload to the BASIC-1.")
+    parser_load.set_defaults(func=load)
+
+    parser_exec = subparsers.add_parser('exec', help='Execute line into the BASIC-1.')
+    parser_exec.add_argument("--port", help="Specify connection port.")
+    parser_exec.add_argument("line", help="Line to execute on the BASIC-1.")
+    parser_exec.set_defaults(func=execute)
+    parsed_args = parser.parse_args()
+    parsed_args.func(parsed_args)
+
+#     (\/)
+#    ( ..)
+#   C(")(")
+# JVdB - 2017
